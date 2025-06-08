@@ -1,0 +1,31 @@
+scan:
+  timeout: 60
+  threads: 30
+  user_agent: "SecurityAuditTool/2.0"
+  modules:
+    - "network"
+
+network:
+  ports:
+    - 22    # SSH
+    - 80    # HTTP
+    - 443   # HTTPS
+    - 8080  # HTTP alt
+    - 8443  # HTTPS alt
+  tcp_timeout: 2  # Plus rapide
+  udp_timeout: 2
+  max_threads: 30  # Plus de parallélisme
+  ping_check: true
+
+http:
+  follow_redirects: true
+  max_redirects: 3
+  timeout: 10
+  user_agent: "SecurityAuditTool/2.0"
+  ssl_check: true
+
+log_level: "info"
+
+reports:
+  default_format: "text"
+  max_findings: 50
