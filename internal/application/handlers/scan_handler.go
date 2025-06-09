@@ -10,7 +10,7 @@ import (
 	"github.com/riadh-benchouche/security-audit-tool/internal/infrastructure/config"
 	"github.com/riadh-benchouche/security-audit-tool/internal/infrastructure/logging"
 	"github.com/riadh-benchouche/security-audit-tool/internal/infrastructure/metrics"
-	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/interfaces"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/interfaces"
 	"github.com/riadh-benchouche/security-audit-tool/pkg/errors"
 )
 
@@ -30,7 +30,7 @@ func NewScanHandler() *ScanHandler {
 
 	scanService := services.NewScanService()
 
-	// Configure scanners with config and dependencies
+	// Configure modules with config and dependencies
 	h := &ScanHandler{
 		scanService: scanService,
 		config:      cfg,
@@ -42,11 +42,11 @@ func NewScanHandler() *ScanHandler {
 	return h
 }
 
-// configureScanners configures all available scanners
+// configureScanners configures all available modules
 func (h *ScanHandler) configureScanners() {
 	scannerManager := h.scanService.GetScannerManager()
 
-	// Get all available scanners
+	// Get all available modules
 	scannerNames := scannerManager.GetAvailableScanners()
 
 	for _, name := range scannerNames {
@@ -156,7 +156,7 @@ func (h *ScanHandler) ConfigureModule(moduleName string, config map[string]inter
 	return h.scanService.ConfigureModule(moduleName, config)
 }
 
-// HealthCheck returns health status of all scanners
+// HealthCheck returns health status of all modules
 func (h *ScanHandler) HealthCheck() map[string]*interfaces.HealthStatus {
 	return h.scanService.GetScannerManager().HealthCheck()
 }

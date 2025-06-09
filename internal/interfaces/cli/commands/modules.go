@@ -2,7 +2,7 @@ package commands
 
 import (
 	"fmt"
-	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/interfaces"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/interfaces"
 	"strings"
 
 	"github.com/riadh-benchouche/security-audit-tool/internal/application/handlers"
@@ -158,9 +158,9 @@ func runHealthCommand(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(strings.Repeat("-", 40))
 	if allHealthy {
-		fmt.Println("🎉 All scanners are healthy!")
+		fmt.Println("🎉 All modules are healthy!")
 	} else {
-		fmt.Println("⚠️  Some scanners have issues. Check the details above.")
+		fmt.Println("⚠️  Some modules have issues. Check the details above.")
 	}
 
 	return nil

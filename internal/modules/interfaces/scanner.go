@@ -7,7 +7,7 @@ import (
 	"github.com/riadh-benchouche/security-audit-tool/internal/domain/entities"
 )
 
-// Scanner defines the contract that all security scanners must implement
+// Scanner defines the contract that all security modules must implement
 type Scanner interface {
 	// Info returns metadata about the scanner
 	Info() *ScannerInfo
@@ -140,7 +140,7 @@ type FindingBuilder interface {
 	Build() (*entities.Finding, error)
 }
 
-// ScannerRegistry manages available scanners
+// ScannerRegistry manages available modules
 type ScannerRegistry interface {
 	// Register adds a scanner to the registry
 	Register(scanner Scanner) error
@@ -151,20 +151,20 @@ type ScannerRegistry interface {
 	// Get retrieves a scanner by name
 	Get(name string) (Scanner, error)
 
-	// List returns all registered scanners
+	// List returns all registered modules
 	List() []Scanner
 
-	// ListByCapability returns scanners with specific capability
+	// ListByCapability returns modules with specific capability
 	ListByCapability(capability string) []Scanner
 
-	// ListByTarget returns scanners compatible with target type
+	// ListByTarget returns modules compatible with target type
 	ListByTarget(targetType entities.TargetType) []Scanner
 
-	// Health checks the health of all registered scanners
+	// Health checks the health of all registered modules
 	Health() map[string]*HealthStatus
 }
 
-// ScannerConfig provides configuration management for scanners
+// ScannerConfig provides configuration management for modules
 type ScannerConfig interface {
 	// Get retrieves a configuration value
 	Get(key string) interface{}
@@ -212,7 +212,7 @@ type ScannerMetrics interface {
 	GetMetrics() map[string]interface{}
 }
 
-// ScannerLogger provides structured logging for scanners
+// ScannerLogger provides structured logging for modules
 type ScannerLogger interface {
 	// Debug logs a debug message
 	Debug(msg string, fields map[string]interface{})

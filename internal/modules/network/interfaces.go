@@ -2,7 +2,7 @@ package network
 
 import (
 	"context"
-	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/interfaces"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/interfaces"
 
 	"github.com/riadh-benchouche/security-audit-tool/internal/domain/entities"
 )

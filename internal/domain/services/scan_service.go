@@ -108,7 +108,7 @@ func (s *ScanService) ExecuteScan(ctx context.Context, scan *entities.Scan) erro
 	return nil
 }
 
-// GetScannerManager retourne le gestionnaire de scanners
+// GetScannerManager retourne le gestionnaire de modules
 func (s *ScanService) GetScannerManager() *ScannerManager {
 	return s.scannerManager
 }

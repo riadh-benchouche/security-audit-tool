@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"github.com/riadh-benchouche/security-audit-tool/internal/domain/entities"
-	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/interfaces"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/interfaces"
 	"strings"
 	"time"
 )

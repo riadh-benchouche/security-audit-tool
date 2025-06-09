@@ -1,7 +1,7 @@
 package dto
 
 import (
-	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/interfaces"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/interfaces"
 	"time"
 
 	"github.com/riadh-benchouche/security-audit-tool/internal/domain/entities"

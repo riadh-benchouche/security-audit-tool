@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/riadh-benchouche/security-audit-tool/internal/domain/entities"
-	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/interfaces"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/interfaces"
 )
 
 // IsHighRiskPort checks if a port is considered high-risk

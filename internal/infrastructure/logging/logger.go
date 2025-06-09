@@ -2,7 +2,7 @@ package logging
 
 import (
 	"github.com/riadh-benchouche/security-audit-tool/internal/domain/entities"
-	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/interfaces"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/interfaces"
 	"github.com/sirupsen/logrus"
 	"os"
 )

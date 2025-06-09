@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/interfaces"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/interfaces"
 )
 
 // Metrics implements the ScannerMetrics interface

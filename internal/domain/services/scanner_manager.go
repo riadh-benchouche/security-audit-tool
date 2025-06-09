@@ -1,15 +1,15 @@
 package services
 
 import (
-	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/http"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/http"
 	"sync"
 
-	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/interfaces"
-	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/network"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/interfaces"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/network"
 	"github.com/riadh-benchouche/security-audit-tool/pkg/errors"
 )
 
-// ScannerManager gère l'enregistrement et l'accès aux scanners
+// ScannerManager gère l'enregistrement et l'accès aux modules
 type ScannerManager struct {
 	scanners map[string]interfaces.Scanner
 	mutex    sync.RWMutex
@@ -21,7 +21,7 @@ func NewScannerManager() *ScannerManager {
 		scanners: make(map[string]interfaces.Scanner),
 	}
 
-	// Enregistrer les scanners par défaut
+	// Enregistrer les modules par défaut
 	manager.registerDefaultScanners()
 
 	return manager
@@ -62,7 +62,7 @@ func (sm *ScannerManager) GetScanner(name string) interfaces.Scanner {
 	return sm.scanners[name]
 }
 
-// GetAvailableScanners retourne la liste des noms de scanners disponibles
+// GetAvailableScanners retourne la liste des noms de modules disponibles
 func (sm *ScannerManager) GetAvailableScanners() []string {
 	sm.mutex.RLock()
 	defer sm.mutex.RUnlock()
@@ -85,7 +85,7 @@ func (sm *ScannerManager) GetScannerInfo(name string) (*interfaces.ScannerInfo, 
 	return scanner.Info(), nil
 }
 
-// GetAllScannerInfos retourne les informations de tous les scanners
+// GetAllScannerInfos retourne les informations de tous les modules
 func (sm *ScannerManager) GetAllScannerInfos() map[string]*interfaces.ScannerInfo {
 	sm.mutex.RLock()
 	defer sm.mutex.RUnlock()
@@ -111,7 +111,7 @@ func (sm *ScannerManager) UnregisterScanner(name string) error {
 	return nil
 }
 
-// HealthCheck vérifie la santé de tous les scanners
+// HealthCheck vérifie la santé de tous les modules
 func (sm *ScannerManager) HealthCheck() map[string]*interfaces.HealthStatus {
 	sm.mutex.RLock()
 	defer sm.mutex.RUnlock()
@@ -138,7 +138,7 @@ func (sm *ScannerManager) ConfigureScanner(name string, config map[string]interf
 	return nil
 }
 
-// Count retourne le nombre de scanners enregistrés
+// Count retourne le nombre de modules enregistrés
 func (sm *ScannerManager) Count() int {
 	sm.mutex.RLock()
 	defer sm.mutex.RUnlock()
