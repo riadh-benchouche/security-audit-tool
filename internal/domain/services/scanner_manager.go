@@ -1,6 +1,7 @@
 package services
 
 import (
+	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/http"
 	"sync"
 
 	"github.com/riadh-benchouche/security-audit-tool/internal/scanners/interfaces"
@@ -32,9 +33,8 @@ func (sm *ScannerManager) registerDefaultScanners() {
 	networkScanner := network.NewNetworkScanner()
 	sm.RegisterScanner("network", networkScanner)
 
-	// TODO: Ajouter d'autres scanners quand ils seront implémentés
-	// httpScanner := http.NewHTTPScanner()
-	// sm.RegisterScanner("http", httpScanner)
+	httpScanner := http.NewHTTPScanner()
+	sm.RegisterScanner("http", httpScanner)
 }
 
 // RegisterScanner enregistre un nouveau scanner
