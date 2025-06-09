@@ -28,19 +28,19 @@ func NewModuleManager() *ModuleManager {
 }
 
 // registerDefaultModules enregistre les modules disponibles
-func (sm *ModuleManager) registerDefaultModules() {
+func (mm *ModuleManager) registerDefaultModules() {
 	// Scanner réseau
 	networkScanner := network.NewNetworkScanner()
-	sm.RegisterModule("network", networkScanner)
+	mm.RegisterModule("network", networkScanner)
 
 	httpScanner := http.NewHTTPScanner()
-	sm.RegisterModule("http", httpScanner)
+	mm.RegisterModule("http", httpScanner)
 }
 
 // RegisterModule enregistre un nouveau module
-func (sm *ModuleManager) RegisterModule(name string, module interfaces.Scanner) error {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
+func (mm *ModuleManager) RegisterModule(name string, module interfaces.Scanner) error {
+	mm.mutex.Lock()
+	defer mm.mutex.Unlock()
 
 	if name == "" {
 		return errors.NewValidationError("module name cannot be empty", nil)
@@ -50,25 +50,25 @@ func (sm *ModuleManager) RegisterModule(name string, module interfaces.Scanner) 
 		return errors.NewValidationError("module cannot be nil", nil)
 	}
 
-	sm.modules[name] = module
+	mm.modules[name] = module
 	return nil
 }
 
 // GetModule retourne un module par son nom
-func (sm *ModuleManager) GetModule(name string) interfaces.Scanner {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
+func (mm *ModuleManager) GetModule(name string) interfaces.Scanner {
+	mm.mutex.RLock()
+	defer mm.mutex.RUnlock()
 
-	return sm.modules[name]
+	return mm.modules[name]
 }
 
 // GetAvailableModules retourne la liste des noms de modules disponibles
-func (sm *ModuleManager) GetAvailableModules() []string {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
+func (mm *ModuleManager) GetAvailableModules() []string {
+	mm.mutex.RLock()
+	defer mm.mutex.RUnlock()
 
-	names := make([]string, 0, len(sm.modules))
-	for name := range sm.modules {
+	names := make([]string, 0, len(mm.modules))
+	for name := range mm.modules {
 		names = append(names, name)
 	}
 
@@ -76,8 +76,8 @@ func (sm *ModuleManager) GetAvailableModules() []string {
 }
 
 // GetModuleInfo retourne les informations d'un module
-func (sm *ModuleManager) GetModuleInfo(name string) (*interfaces.ScannerInfo, error) {
-	module := sm.GetModule(name)
+func (mm *ModuleManager) GetModuleInfo(name string) (*interfaces.ScannerInfo, error) {
+	module := mm.GetModule(name)
 	if module == nil {
 		return nil, errors.NewNotFoundError("module", name)
 	}
@@ -86,12 +86,12 @@ func (sm *ModuleManager) GetModuleInfo(name string) (*interfaces.ScannerInfo, er
 }
 
 // GetAllModuleInfos retourne les informations de tous les modules
-func (sm *ModuleManager) GetAllModuleInfos() map[string]*interfaces.ScannerInfo {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
+func (mm *ModuleManager) GetAllModuleInfos() map[string]*interfaces.ScannerInfo {
+	mm.mutex.RLock()
+	defer mm.mutex.RUnlock()
 
 	infos := make(map[string]*interfaces.ScannerInfo)
-	for name, module := range sm.modules {
+	for name, module := range mm.modules {
 		infos[name] = module.Info()
 	}
 
@@ -99,25 +99,25 @@ func (sm *ModuleManager) GetAllModuleInfos() map[string]*interfaces.ScannerInfo 
 }
 
 // UnregisterModule supprime un module
-func (sm *ModuleManager) UnregisterModule(name string) error {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
+func (mm *ModuleManager) UnregisterModule(name string) error {
+	mm.mutex.Lock()
+	defer mm.mutex.Unlock()
 
-	if _, exists := sm.modules[name]; !exists {
+	if _, exists := mm.modules[name]; !exists {
 		return errors.NewNotFoundError("module", name)
 	}
 
-	delete(sm.modules, name)
+	delete(mm.modules, name)
 	return nil
 }
 
 // HealthCheck vérifie la santé de tous les modules
-func (sm *ModuleManager) HealthCheck() map[string]*interfaces.HealthStatus {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
+func (mm *ModuleManager) HealthCheck() map[string]*interfaces.HealthStatus {
+	mm.mutex.RLock()
+	defer mm.mutex.RUnlock()
 
 	health := make(map[string]*interfaces.HealthStatus)
-	for name, module := range sm.modules {
+	for name, module := range mm.modules {
 		health[name] = module.Health()
 	}
 
@@ -125,8 +125,8 @@ func (sm *ModuleManager) HealthCheck() map[string]*interfaces.HealthStatus {
 }
 
 // ConfigureModule configure un module spécifique
-func (sm *ModuleManager) ConfigureModule(name string, config map[string]interface{}) error {
-	module := sm.GetModule(name)
+func (mm *ModuleManager) ConfigureModule(name string, config map[string]interface{}) error {
+	module := mm.GetModule(name)
 	if module == nil {
 		return errors.NewNotFoundError("module", name)
 	}
@@ -139,9 +139,9 @@ func (sm *ModuleManager) ConfigureModule(name string, config map[string]interfac
 }
 
 // Count retourne le nombre de modules enregistrés
-func (sm *ModuleManager) Count() int {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
+func (mm *ModuleManager) Count() int {
+	mm.mutex.RLock()
+	defer mm.mutex.RUnlock()
 
-	return len(sm.modules)
+	return len(mm.modules)
 }
