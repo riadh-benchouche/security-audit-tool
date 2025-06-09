@@ -11,13 +11,13 @@ import (
 
 // ScanService gère la logique métier des scans
 type ScanService struct {
-	scannerManager *ScannerManager
+	moduleManager *ModuleManager
 }
 
 // NewScanService crée une nouvelle instance du service de scan
 func NewScanService() *ScanService {
 	return &ScanService{
-		scannerManager: NewScannerManager(),
+		moduleManager: NewModuleManager(),
 	}
 }
 
@@ -59,7 +59,7 @@ func (s *ScanService) ExecuteScan(ctx context.Context, scan *entities.Scan) erro
 		}
 
 		// Obtenir le scanner pour ce module
-		scanner := s.scannerManager.GetScanner(moduleName)
+		scanner := s.moduleManager.GetModule(moduleName)
 		if scanner == nil {
 			// Ajouter une execution échouée
 			module, _ := entities.NewModule(moduleName, "unknown", "Unknown module", "system")
@@ -109,8 +109,8 @@ func (s *ScanService) ExecuteScan(ctx context.Context, scan *entities.Scan) erro
 }
 
 // GetScannerManager retourne le gestionnaire de modules
-func (s *ScanService) GetScannerManager() *ScannerManager {
-	return s.scannerManager
+func (s *ScanService) GetScannerManager() *ModuleManager {
+	return s.moduleManager
 }
 
 // ValidateTarget valide une target avant scan
@@ -133,12 +133,12 @@ func (s *ScanService) ValidateTarget(targetStr string) (*entities.Target, error)
 
 // GetAvailableModules retourne la liste des modules disponibles
 func (s *ScanService) GetAvailableModules() []string {
-	return s.scannerManager.GetAvailableScanners()
+	return s.moduleManager.GetAvailableModules()
 }
 
 // ConfigureModule configure un module spécifique
 func (s *ScanService) ConfigureModule(moduleName string, config map[string]interface{}) error {
-	scanner := s.scannerManager.GetScanner(moduleName)
+	scanner := s.moduleManager.GetModule(moduleName)
 	if scanner == nil {
 		return errors.NewNotFoundError("scanner", moduleName)
 	}

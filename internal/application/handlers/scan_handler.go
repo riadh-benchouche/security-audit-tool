@@ -47,10 +47,10 @@ func (h *ScanHandler) configureScanners() {
 	scannerManager := h.scanService.GetScannerManager()
 
 	// Get all available modules
-	scannerNames := scannerManager.GetAvailableScanners()
+	scannerNames := scannerManager.GetAvailableModules()
 
 	for _, name := range scannerNames {
-		scanner := scannerManager.GetScanner(name)
+		scanner := scannerManager.GetModule(name)
 		if scanner == nil {
 			continue
 		}
@@ -62,7 +62,7 @@ func (h *ScanHandler) configureScanners() {
 			continue
 		}
 
-		// Set logger and metrics if scanner supports it
+		// Set logger and metrics if the module supports it
 		if ns, ok := scanner.(interface {
 			SetLogger(interfaces.ScannerLogger)
 		}); ok {
@@ -143,12 +143,12 @@ func (h *ScanHandler) GetAvailableModules() []string {
 
 // GetModuleInfo returns information about a specific module
 func (h *ScanHandler) GetModuleInfo(moduleName string) (*interfaces.ScannerInfo, error) {
-	return h.scanService.GetScannerManager().GetScannerInfo(moduleName)
+	return h.scanService.GetScannerManager().GetModuleInfo(moduleName)
 }
 
 // GetAllModuleInfos returns information about all modules
 func (h *ScanHandler) GetAllModuleInfos() map[string]*interfaces.ScannerInfo {
-	return h.scanService.GetScannerManager().GetAllScannerInfos()
+	return h.scanService.GetScannerManager().GetAllModuleInfos()
 }
 
 // ConfigureModule configures a specific module
