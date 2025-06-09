@@ -92,29 +92,42 @@ func (ps *portScanner) scanPort(ctx context.Context, target *entities.Target, po
 	timeout := time.Duration(ps.config.TCPTimeout) * time.Second
 	address := net.JoinHostPort(target.Host(), fmt.Sprintf("%d", port))
 
-	// ✅ Utiliser DialTimeout avec contexte et timeout approprié
 	conn, err := net.DialTimeout("tcp", address, timeout)
 	if err != nil {
-		// ✅ Analyser le type d'erreur pour distinguer fermé vs filtré
+		// Classification d'erreur simplifiée
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 			result.State = PortStateFiltered
-		} else {
-			result.State = PortStateClosed
 		}
 		return result
 	}
-
-	// ✅ Le port est vraiment ouvert
 	defer conn.Close()
+
 	result.State = PortStateOpen
 
-	// ✅ Essayer de récupérer une bannière seulement si le port est ouvert
+	// Banner grabbing conditionnel et rapide
 	if ps.config.BannerGrab {
-		banner := ps.grabBanner(conn, timeout)
-		result.Banner = banner
+		result.Banner = ps.quickBanner(conn, timeout/2)
 	}
 
 	return result
+}
+
+func (ps *portScanner) quickBanner(conn net.Conn, timeout time.Duration) string {
+	conn.SetReadDeadline(time.Now().Add(timeout))
+	buffer := make([]byte, 512) // Plus petit buffer
+	n, err := conn.Read(buffer)
+	if err != nil {
+		return ""
+	}
+
+	// Nettoyage basique
+	banner := string(buffer[:n])
+	return strings.Map(func(r rune) rune {
+		if r >= 32 && r < 127 {
+			return r
+		}
+		return -1
+	}, strings.TrimSpace(banner))
 }
 
 // grabBanner attempts to grab banner from the connection

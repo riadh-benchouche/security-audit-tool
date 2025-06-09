@@ -2,9 +2,8 @@ package network
 
 import (
 	"context"
-	"github.com/riadh-benchouche/security-audit-tool/internal/modules/interfaces"
-
 	"github.com/riadh-benchouche/security-audit-tool/internal/domain/entities"
+	"github.com/riadh-benchouche/security-audit-tool/internal/modules/interfaces"
 )
 
 // PortScanner handles port scanning operations

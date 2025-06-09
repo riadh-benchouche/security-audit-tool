@@ -37,8 +37,8 @@ func NewNetworkScanner() *NetworkScanner {
 		detector:    NewServiceDetector(),
 		grabber:     NewBannerGrabber(),
 		osDetector:  NewOSDetector(),
-		logger:      NewNoOpLogger(),  // Function from utils
-		metrics:     NewNoOpMetrics(), // Function from utils
+		logger:      NewNoOpLogger(),
+		metrics:     NewNoOpMetrics(),
 	}
 }
 
@@ -65,16 +65,16 @@ func (ns *NetworkScanner) Info() *interfaces.ScannerInfo {
 			"reconnaissance",
 		},
 		ConfigSchema: map[string]string{
-			"timeout":      "int:5:300",     // seconds, min 5, max 300
-			"max_threads":  "int:1:200",     // concurrent threads
-			"ports":        "[]int",         // list of ports to scan
-			"top_ports":    "int:100:10000", // number of top ports
-			"tcp_timeout":  "int:1:30",      // TCP connection timeout
-			"udp_timeout":  "int:1:30",      // UDP timeout
-			"ping_check":   "bool",          // perform ping check
-			"service_scan": "bool",          // enable service detection
-			"banner_grab":  "bool",          // enable banner grabbing
-			"os_detect":    "bool",          // enable OS detection
+			"timeout":      "int:5:300",
+			"max_threads":  "int:1:200",
+			"ports":        "[]int",
+			"top_ports":    "int:100:10000",
+			"tcp_timeout":  "int:1:30",
+			"udp_timeout":  "int:1:30",
+			"ping_check":   "bool",
+			"service_scan": "bool",
+			"banner_grab":  "bool",
+			"os_detect":    "bool",
 		},
 	}
 }
@@ -110,6 +110,17 @@ func (ns *NetworkScanner) Configure(config map[string]interface{}) error {
 		return fmt.Errorf("failed to configure OS detector: %w", err)
 	}
 
+	ns.logger.Info("Network scanner configured", map[string]interface{}{
+		"timeout":      ns.config.Timeout,
+		"max_threads":  ns.config.MaxThreads,
+		"ports_count":  len(ns.config.Ports),
+		"tcp_timeout":  ns.config.TCPTimeout,
+		"ping_check":   ns.config.PingCheck,
+		"service_scan": ns.config.ServiceScan,
+		"banner_grab":  ns.config.BannerGrab,
+		"os_detect":    ns.config.OSDetect,
+	})
+
 	return nil
 }
 
@@ -143,7 +154,7 @@ func (ns *NetworkScanner) Scan(ctx context.Context, target *entities.Target) (*e
 	ns.mu.Lock()
 	if ns.isRunning {
 		ns.mu.Unlock()
-		return nil, errors.NewBusinessLogicError("scanner is already running", nil)
+		return nil, errors.NewBusinessLogicError("scanner already running", nil)
 	}
 	ns.isRunning = true
 	ns.mu.Unlock()
@@ -154,65 +165,35 @@ func (ns *NetworkScanner) Scan(ctx context.Context, target *entities.Target) (*e
 		ns.mu.Unlock()
 	}()
 
-	// Create module for this scan
-	module, err := entities.NewModule("network", "1.0.0", "Network security scanner", "Security Team")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create module: %w", err)
-	}
-
-	// Create execution
+	// Création rapide de l'exécution
 	executionID := fmt.Sprintf("network_%d", time.Now().UnixNano())
+	module, _ := entities.NewModule("network", "1.0.0", "Network scanner", "Security Team")
 	execution, err := entities.NewModuleExecution(executionID, module, target)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create execution: %w", err)
+		return nil, err
 	}
 
-	// Start execution
-	if err := execution.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start execution: %w", err)
-	}
+	execution.Start()
 
-	// Set up logging context
-	logger := ns.logger.WithScanner("network").WithTarget(target)
-	logger.Info("Starting network scan", map[string]interface{}{
-		"target":      target.Original(),
-		"target_type": target.Type().String(),
-	})
-
-	// Record scan start
+	// Métriques
 	ns.metrics.IncrementScansTotal("network")
+	startTime := time.Now()
 
-	// Execute scan phases
-	phases := NewScanPhases(
-		ns.config,
-		logger,
-		ns.portScanner,
-		ns.detector,
-		ns.grabber,
-		ns.osDetector,
-		ns.stopChan,
-	)
+	// Exécution des phases
+	phases := NewScanPhases(ns.config, ns.logger, ns.portScanner, ns.detector, ns.grabber, ns.osDetector, ns.stopChan)
 	err = phases.ExecuteAllPhases(ctx, target, execution)
 
-	// Complete execution
+	// Finalisation
+	duration := time.Since(startTime)
 	if err != nil {
 		execution.Fail(err.Error())
 		ns.metrics.IncrementScansFailed("network")
-		logger.Error("Network scan failed", err, map[string]interface{}{
-			"execution_id": executionID,
-		})
 	} else {
 		execution.Complete()
 		ns.metrics.IncrementScansSuccessful("network")
-		logger.Info("Network scan completed successfully", map[string]interface{}{
-			"execution_id": executionID,
-			"findings":     execution.FindingCount(),
-			"duration":     execution.Duration().String(),
-		})
 	}
 
-	// Record metrics
-	ns.metrics.ObserveScanDuration("network", execution.Duration())
+	ns.metrics.ObserveScanDuration("network", duration)
 	ns.metrics.ObserveFindingsCount("network", execution.FindingCount())
 
 	return execution, err

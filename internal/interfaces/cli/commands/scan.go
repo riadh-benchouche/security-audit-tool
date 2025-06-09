@@ -130,7 +130,7 @@ func (sc *ScanCommand) printScanSummary(result *commands.StartScanResult, logger
 
 	fmt.Printf("📊 Status:        %s\n", scan.Status().String())
 	fmt.Printf("🎯 Target:        %s\n", scan.Target().Original())
-	fmt.Printf("⏱️  Duration:      %s\n", scan.Duration().String())
+	fmt.Printf("⏱️ Duration:      %s\n", scan.Duration().String())
 	fmt.Printf("🔍 Total Findings: %d\n", len(scan.GetAllFindings()))
 
 	if scan.Summary() != nil {

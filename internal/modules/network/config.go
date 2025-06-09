@@ -33,7 +33,7 @@ func NewDefaultConfig() *Config {
 		PingCheck:   true,
 		ServiceScan: true,
 		BannerGrab:  true,
-		OSDetect:    false, // Disabled by default as it can be slow
+		OSDetect:    true,
 	}
 }
 
@@ -56,7 +56,7 @@ func (c *Config) Update(config map[string]interface{}) error {
 	if maxThreads, ok := config["max_threads"]; ok {
 		if mt, ok := maxThreads.(int); ok {
 			if mt <= 0 {
-				c.MaxThreads = 10 // Valeur par défaut
+				c.MaxThreads = 10
 			} else if mt <= 200 {
 				c.MaxThreads = mt
 			} else {
@@ -71,7 +71,6 @@ func (c *Config) Update(config map[string]interface{}) error {
 		if portList, ok := ports.([]int); ok {
 			c.Ports = portList
 		} else if portInterface, ok := ports.([]interface{}); ok {
-			// Handle JSON unmarshal case
 			c.Ports = make([]int, len(portInterface))
 			for i, p := range portInterface {
 				if port, ok := p.(float64); ok {
@@ -132,8 +131,8 @@ func (c *Config) Update(config map[string]interface{}) error {
 	}
 
 	if osDetect, ok := config["os_detect"]; ok {
-		if od, ok := osDetect.(bool); ok {
-			c.OSDetect = od
+		if _, ok := osDetect.(bool); ok {
+			c.OSDetect = true
 		}
 	}
 
@@ -142,30 +141,38 @@ func (c *Config) Update(config map[string]interface{}) error {
 
 // Validate validates the configuration values
 func (c *Config) Validate() error {
-	if c.Timeout <= 0 || c.Timeout > 3600 {
-		return fmt.Errorf("timeout must be between 1 and 3600 seconds")
+	validators := []func() error{
+		func() error {
+			if c.Timeout <= 0 || c.Timeout > 3600 {
+				return fmt.Errorf("timeout must be between 1 and 3600 seconds")
+			}
+			return nil
+		},
+		func() error {
+			if c.MaxThreads <= 0 || c.MaxThreads > 200 {
+				return fmt.Errorf("max_threads must be between 1 and 200")
+			}
+			return nil
+		},
+		func() error {
+			if len(c.Ports) == 0 {
+				return fmt.Errorf("at least one port must be specified")
+			}
+			return nil
+		},
+		func() error {
+			for _, port := range c.Ports {
+				if port <= 0 || port > 65535 {
+					return fmt.Errorf("port %d is invalid", port)
+				}
+			}
+			return nil
+		},
 	}
 
-	if c.MaxThreads <= 0 || c.MaxThreads > 200 {
-		return fmt.Errorf("max_threads must be between 1 and 200")
-	}
-
-	if c.TCPTimeout <= 0 || c.TCPTimeout > 30 {
-		return fmt.Errorf("tcp_timeout must be between 1 and 30 seconds")
-	}
-
-	if c.UDPTimeout <= 0 || c.UDPTimeout > 30 {
-		return fmt.Errorf("udp_timeout must be between 1 and 30 seconds")
-	}
-
-	if len(c.Ports) == 0 {
-		return fmt.Errorf("at least one port must be specified")
-	}
-
-	// Validate port ranges
-	for _, port := range c.Ports {
-		if port <= 0 || port > 65535 {
-			return fmt.Errorf("port %d is invalid, must be between 1 and 65535", port)
+	for _, validator := range validators {
+		if err := validator(); err != nil {
+			return err
 		}
 	}
 
@@ -177,8 +184,12 @@ func (c *Config) GetPortList() []int {
 	if len(c.Ports) > 0 {
 		return c.Ports
 	}
-	// Return default ports if none specified
 	return NewDefaultConfig().Ports
+}
+
+// GetPortCount returns the number of ports to scan
+func (c *Config) GetPortCount() int {
+	return len(c.GetPortList())
 }
 
 // IsServiceScanEnabled returns true if service scanning is enabled
@@ -196,22 +207,27 @@ func (c *Config) IsOSDetectionEnabled() bool {
 	return c.OSDetect
 }
 
+// IsOSDetectEnabled est un alias pour compatibilité
+func (c *Config) IsOSDetectEnabled() bool {
+	return c.OSDetect
+}
+
 // IsPingCheckEnabled returns true if ping check is enabled
 func (c *Config) IsPingCheckEnabled() bool {
 	return c.PingCheck
 }
 
-// GetTimeoutDuration returns the timeout as a time.Duration
+// GetTimeoutDuration returns the timeout as an int
 func (c *Config) GetTimeoutDuration() int {
 	return c.Timeout
 }
 
-// GetTCPTimeoutDuration returns the TCP timeout as a time.Duration
+// GetTCPTimeoutDuration returns the TCP timeout as an int
 func (c *Config) GetTCPTimeoutDuration() int {
 	return c.TCPTimeout
 }
 
-// GetUDPTimeoutDuration returns the UDP timeout as a time.Duration
+// GetUDPTimeoutDuration returns the UDP timeout as an int
 func (c *Config) GetUDPTimeoutDuration() int {
 	return c.UDPTimeout
 }

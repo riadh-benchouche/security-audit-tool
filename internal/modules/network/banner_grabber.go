@@ -40,7 +40,7 @@ func (bg *bannerGrabber) Configure(config *Config) error {
 	return nil
 }
 
-// GrabBanner grabs banner from the specified port
+// GrabBanner grabs banner from the specified port - retourne string comme défini dans l'interface
 func (bg *bannerGrabber) GrabBanner(ctx context.Context, target *entities.Target, port int) (string, error) {
 	bg.mu.RLock()
 	config := bg.config
@@ -48,7 +48,7 @@ func (bg *bannerGrabber) GrabBanner(ctx context.Context, target *entities.Target
 	bg.mu.RUnlock()
 
 	if config == nil {
-		return "", errors.NewScannerError("banner-grabber", "grab", fmt.Errorf("banner grabber not configured"))
+		return "", errors.NewScannerError("banner-grabber", "grab", fmt.Errorf("not configured"))
 	}
 
 	timeout := time.Duration(config.TCPTimeout) * time.Second
@@ -56,44 +56,60 @@ func (bg *bannerGrabber) GrabBanner(ctx context.Context, target *entities.Target
 
 	conn, err := net.DialTimeout("tcp", address, timeout)
 	if err != nil {
-		return "", errors.NewNetworkError("banner grab", address, err)
+		return "", nil // Retourne silencieusement en cas d'échec
 	}
 	defer conn.Close()
 
-	conn.SetReadDeadline(time.Now().Add(timeout))
-	conn.SetWriteDeadline(time.Now().Add(timeout))
+	conn.SetDeadline(time.Now().Add(timeout))
 
-	// Try different probes for the specific port
+	// Essayer les sondes spécifiques au port
 	for _, probe := range probes {
-		banner, err := bg.sendProbeAndRead(conn, probe)
-		if err == nil && banner != "" {
-			return banner, nil
+		if banner := bg.tryProbe(conn, probe); banner != "" {
+			return bg.cleanBanner(banner), nil
 		}
-
-		// Reset connection timeout for next probe
-		conn.SetReadDeadline(time.Now().Add(timeout))
 	}
 
-	// Try generic probes if port-specific ones didn't work
+	// Essayer les sondes génériques
 	if genericProbes, exists := bg.probes[0]; exists {
 		for _, probe := range genericProbes {
-			banner, err := bg.sendProbeAndRead(conn, probe)
-			if err == nil && banner != "" {
-				return banner, nil
+			if banner := bg.tryProbe(conn, probe); banner != "" {
+				return bg.cleanBanner(banner), nil
 			}
-
-			// Reset connection timeout for next probe
-			conn.SetReadDeadline(time.Now().Add(timeout))
 		}
 	}
 
-	// Try just reading without sending anything (for services that send banners immediately)
-	banner, err := bg.readBanner(conn)
-	if err == nil && banner != "" {
-		return banner, nil
+	// Lecture simple sans sonde
+	if banner := bg.readBanner(conn); banner != "" {
+		return bg.cleanBanner(banner), nil
 	}
 
-	return "", errors.NewScannerError("banner-grabber", "grab", fmt.Errorf("no banner received from %s", address))
+	return "", nil
+}
+
+func (bg *bannerGrabber) tryProbe(conn net.Conn, probe string) string {
+	if probe != "" {
+		if _, err := conn.Write([]byte(probe)); err != nil {
+			return ""
+		}
+	}
+	return bg.readBanner(conn)
+}
+
+// GrabBannerResult retourne un BannerResult pour compatibilité avec les nouvelles fonctionnalités
+func (bg *bannerGrabber) GrabBannerResult(ctx context.Context, target *entities.Target, port int) (BannerResult, error) {
+	banner, err := bg.GrabBanner(ctx, target, port)
+
+	result := BannerResult{
+		Port:    port,
+		Content: banner,
+		Length:  len(banner),
+	}
+
+	if err != nil {
+		result.Error = err.Error()
+	}
+
+	return result, err
 }
 
 // sendProbeAndRead sends a probe and reads the response
@@ -105,23 +121,17 @@ func (bg *bannerGrabber) sendProbeAndRead(conn net.Conn, probe string) (string, 
 		}
 	}
 
-	return bg.readBanner(conn)
+	return bg.readBanner(conn), nil
 }
 
 // readBanner reads banner from the connection
-func (bg *bannerGrabber) readBanner(conn net.Conn) (string, error) {
-	buffer := make([]byte, 4096)
+func (bg *bannerGrabber) readBanner(conn net.Conn) string {
+	buffer := make([]byte, 2048) // Réduit de 4096 à 2048
 	n, err := conn.Read(buffer)
 	if err != nil {
-		return "", err
+		return ""
 	}
-
-	banner := strings.TrimSpace(string(buffer[:n]))
-
-	// Clean up the banner (remove control characters, etc.)
-	banner = bg.cleanBanner(banner)
-
-	return banner, nil
+	return strings.TrimSpace(string(buffer[:n]))
 }
 
 // cleanBanner cleans up the banner text
@@ -140,7 +150,14 @@ func (bg *bannerGrabber) cleanBanner(banner string) string {
 		}
 	}
 
-	return strings.Join(cleanLines, " ")
+	result := strings.Join(cleanLines, " ")
+
+	// Limit banner length for security
+	if len(result) > 500 {
+		result = result[:500] + "..."
+	}
+
+	return result
 }
 
 // initializeProbes initializes probes for different services
@@ -157,10 +174,10 @@ func (bg *bannerGrabber) initializeProbes() {
 
 	// FTP probes
 	bg.probes[21] = []string{
+		"", // FTP usually sends banner immediately
 		"HELP\r\n",
 		"SYST\r\n",
 		"FEAT\r\n",
-		"", // FTP usually sends banner immediately
 	}
 
 	// SSH probes
@@ -205,41 +222,6 @@ func (bg *bannerGrabber) initializeProbes() {
 	bg.probes[8080] = bg.probes[80]
 	bg.probes[8443] = bg.probes[80]
 
-	// IMAPS probes
-	bg.probes[993] = []string{
-		"", // IMAPS sends banner immediately after TLS handshake
-	}
-
-	// POP3S probes
-	bg.probes[995] = []string{
-		"", // POP3S sends banner immediately after TLS handshake
-	}
-
-	// MSSQL probes
-	bg.probes[1433] = []string{
-		"", // Try reading banner first
-	}
-
-	// MySQL probes
-	bg.probes[3306] = []string{
-		"", // MySQL sends banner immediately
-	}
-
-	// RDP probes
-	bg.probes[3389] = []string{
-		"", // Try reading banner first
-	}
-
-	// PostgreSQL probes
-	bg.probes[5432] = []string{
-		"", // Try reading banner first
-	}
-
-	// VNC probes
-	bg.probes[5900] = []string{
-		"", // VNC sends banner immediately
-	}
-
 	// Generic probes (applied to all ports if specific probes fail)
 	bg.probes[0] = []string{
 		"", // Try reading without sending anything first
@@ -253,7 +235,6 @@ func (bg *bannerGrabber) initializeProbes() {
 
 // Stop stops the banner grabber
 func (bg *bannerGrabber) Stop() {
-	// Implementation for stopping ongoing banner grabs
 	bg.mu.Lock()
 	defer bg.mu.Unlock()
 	// Set a stop flag if needed

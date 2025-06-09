@@ -37,6 +37,9 @@ network:
   tcp_timeout: 5
   udp_timeout: 5
   max_threads: 50
+  os_detect: true
+  banner_grab: true
+  service_scan: true
 
 # Configuration du scanner HTTP
 http:

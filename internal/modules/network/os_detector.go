@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/riadh-benchouche/security-audit-tool/internal/domain/entities"
-	"github.com/riadh-benchouche/security-audit-tool/pkg/errors"
 )
 
 // osDetector implements the OSDetector interface
@@ -26,7 +25,7 @@ type OSSignature struct {
 	Name       string
 	Family     string
 	Pattern    *regexp.Regexp
-	Confidence int
+	Confidence float64 // Changé de int à float64 pour correspondre à OSInfo
 	Method     string
 }
 
@@ -56,21 +55,15 @@ func (od *osDetector) DetectOS(ctx context.Context, target *entities.Target) (*O
 	od.mu.RUnlock()
 
 	if config == nil {
-		return nil, errors.NewScannerError("os-detector", "detect", fmt.Errorf("OS detector not configured"))
+		return nil, fmt.Errorf("not configured")
 	}
 
-	// Try different OS detection methods
-	methods := []struct {
-		name string
-		fn   func(context.Context, *entities.Target) (*OSInfo, error)
-	}{
-		{"banner-analysis", od.detectOSFromBanners},
-		{"tcp-fingerprint", od.detectOSFromTCPFingerprint},
-		{"port-pattern", od.detectOSFromPortPattern},
+	// Méthodes ordonnées par efficacité
+	methods := []func(context.Context, *entities.Target) (*OSInfo, error){
+		od.detectOSFromBanners,
+		od.detectOSFromPortPattern,
+		od.detectOSFromTCPFingerprint,
 	}
-
-	var bestMatch *OSInfo
-	maxConfidence := 0
 
 	for _, method := range methods {
 		select {
@@ -79,24 +72,18 @@ func (od *osDetector) DetectOS(ctx context.Context, target *entities.Target) (*O
 		default:
 		}
 
-		osInfo, err := method.fn(ctx, target)
-		if err != nil {
-			continue // Try next method
-		}
-
-		if osInfo != nil && osInfo.Confidence > maxConfidence {
-			bestMatch = osInfo
-			maxConfidence = osInfo.Confidence
+		if osInfo, err := method(ctx, target); err == nil && osInfo != nil && osInfo.Confidence > 0.5 {
+			return osInfo, nil
 		}
 	}
 
-	return bestMatch, nil
+	return nil, nil
 }
 
 // detectOSFromBanners detects OS from service banners
 func (od *osDetector) detectOSFromBanners(ctx context.Context, target *entities.Target) (*OSInfo, error) {
-	// Common ports that often reveal OS information
-	ports := []int{22, 80, 443, 21, 25, 110, 143}
+	// Ports prioritaires pour la détection OS
+	ports := []int{22, 80, 443, 21, 25}
 
 	for _, port := range ports {
 		select {
@@ -110,10 +97,18 @@ func (od *osDetector) detectOSFromBanners(ctx context.Context, target *entities.
 			continue
 		}
 
-		// Check banner against OS signatures
+		// Analyse HTTP spécialisée
+		if port == 80 || port == 443 {
+			if osInfo := od.analyzeHTTPHeaders(banner); osInfo != nil {
+				return osInfo, nil
+			}
+		}
+
+		// Signatures générales
 		for _, signature := range od.osSignatures {
 			if signature.Method == "banner" && signature.Pattern.MatchString(banner) {
 				return &OSInfo{
+					OS:          signature.Name,
 					Name:        signature.Name,
 					Family:      signature.Family,
 					Confidence:  signature.Confidence,
@@ -125,6 +120,71 @@ func (od *osDetector) detectOSFromBanners(ctx context.Context, target *entities.
 	}
 
 	return nil, nil
+}
+
+func (od *osDetector) analyzeHTTPHeaders(banner string) *OSInfo {
+	banner = strings.ToLower(banner)
+
+	// Détection basée sur les headers HTTP
+	patterns := map[string]OSInfo{
+		// Server headers
+		"server: nginx": {
+			Name:       "Linux",
+			Family:     "Linux",
+			Confidence: 0.6, // Moderate confidence
+			Method:     "http-server-analysis",
+		},
+		"server: apache": {
+			Name:       "Linux",
+			Family:     "Unix",
+			Confidence: 0.5,
+			Method:     "http-server-analysis",
+		},
+		"server: microsoft-iis": {
+			Name:       "Windows Server",
+			Family:     "Windows",
+			Confidence: 0.9,
+			Method:     "http-server-analysis",
+		},
+		"server: apache.*ubuntu": {
+			Name:       "Ubuntu Linux",
+			Family:     "Linux",
+			Confidence: 0.8,
+			Method:     "http-server-analysis",
+		},
+		"server: apache.*centos": {
+			Name:       "CentOS Linux",
+			Family:     "Linux",
+			Confidence: 0.8,
+			Method:     "http-server-analysis",
+		},
+		// PHP headers (your target has PHP/8.2.28)
+		"x-powered-by: php": {
+			Name:       "Linux",
+			Family:     "Unix",
+			Confidence: 0.4, // PHP runs mostly on Linux
+			Method:     "http-technology-analysis",
+		},
+		// Autres indices
+		"server:.*windows": {
+			Name:       "Windows",
+			Family:     "Windows",
+			Confidence: 0.7,
+			Method:     "http-server-analysis",
+		},
+	}
+
+	for pattern, osInfo := range patterns {
+		matched, _ := regexp.MatchString(pattern, banner)
+		if matched {
+			result := osInfo
+			result.OS = osInfo.Name
+			result.Fingerprint = banner
+			return &result
+		}
+	}
+
+	return nil
 }
 
 // detectOSFromTCPFingerprint detects OS using TCP fingerprinting
@@ -142,6 +202,7 @@ func (od *osDetector) detectOSFromTCPFingerprint(ctx context.Context, target *en
 	for _, signature := range od.osSignatures {
 		if signature.Method == "tcp-fingerprint" && signature.Pattern.MatchString(fingerprint) {
 			return &OSInfo{
+				OS:          signature.Name,
 				Name:        signature.Name,
 				Family:      signature.Family,
 				Confidence:  signature.Confidence,
@@ -156,8 +217,8 @@ func (od *osDetector) detectOSFromTCPFingerprint(ctx context.Context, target *en
 
 // detectOSFromPortPattern detects OS based on open port patterns
 func (od *osDetector) detectOSFromPortPattern(ctx context.Context, target *entities.Target) (*OSInfo, error) {
-	// Scan common ports to determine OS based on typical port patterns
-	commonPorts := []int{22, 80, 135, 139, 443, 445, 993, 995, 3389, 5900}
+	// Scan plus de ports pour une meilleure détection
+	commonPorts := []int{22, 80, 135, 139, 443, 445, 993, 995, 3389, 5900, 8080, 8443, 21, 25, 110, 143}
 
 	var openPorts []int
 	for _, port := range commonPorts {
@@ -176,22 +237,55 @@ func (od *osDetector) detectOSFromPortPattern(ctx context.Context, target *entit
 		return nil, nil
 	}
 
-	// Analyze port patterns
-	portPattern := od.generatePortPattern(openPorts)
+	// Analyse plus fine des patterns
+	return od.analyzePortPattern(openPorts), nil
+}
 
-	for _, signature := range od.osSignatures {
-		if signature.Method == "port-pattern" && signature.Pattern.MatchString(portPattern) {
-			return &OSInfo{
-				Name:        signature.Name,
-				Family:      signature.Family,
-				Confidence:  signature.Confidence,
-				Fingerprint: portPattern,
-				Method:      "port-pattern",
-			}, nil
+func (od *osDetector) analyzePortPattern(openPorts []int) *OSInfo {
+	portsSet := make(map[int]bool)
+	for _, port := range openPorts {
+		portsSet[port] = true
+	}
+
+	// Patterns spécifiques
+
+	// Linux web server pattern (80, 443, 22 souvent)
+	if portsSet[80] && portsSet[443] && portsSet[22] {
+		return &OSInfo{
+			Name:        "Linux Server",
+			OS:          "Linux Server",
+			Family:      "Linux",
+			Confidence:  0.6,
+			Method:      "port-pattern-analysis",
+			Fingerprint: fmt.Sprintf("ports: %v", openPorts),
 		}
 	}
 
-	return nil, nil
+	// Web server with common alternate port
+	if portsSet[80] && portsSet[8080] && len(openPorts) <= 5 {
+		return &OSInfo{
+			Name:        "Linux Web Server",
+			OS:          "Linux Web Server",
+			Family:      "Linux",
+			Confidence:  0.5,
+			Method:      "port-pattern-analysis",
+			Fingerprint: fmt.Sprintf("web-server-ports: %v", openPorts),
+		}
+	}
+
+	// Windows patterns
+	if portsSet[135] && portsSet[445] {
+		return &OSInfo{
+			Name:        "Windows Server",
+			OS:          "Windows Server",
+			Family:      "Windows",
+			Confidence:  0.8,
+			Method:      "port-pattern-analysis",
+			Fingerprint: fmt.Sprintf("windows-ports: %v", openPorts),
+		}
+	}
+
+	return nil
 }
 
 // performTCPFingerprinting performs basic TCP fingerprinting
@@ -326,35 +420,35 @@ func (od *osDetector) initializeSignatures() {
 			Name:       "Ubuntu Linux",
 			Family:     "Linux",
 			Pattern:    regexp.MustCompile(`(?i)SSH-2\.0-OpenSSH.*Ubuntu`),
-			Confidence: 85,
+			Confidence: 0.85, // Convertis en float64 (85%)
 			Method:     "banner",
 		},
 		{
 			Name:       "CentOS Linux",
 			Family:     "Linux",
 			Pattern:    regexp.MustCompile(`(?i)SSH-2\.0-OpenSSH.*CentOS`),
-			Confidence: 85,
+			Confidence: 0.85,
 			Method:     "banner",
 		},
 		{
 			Name:       "Red Hat Linux",
 			Family:     "Linux",
 			Pattern:    regexp.MustCompile(`(?i)SSH-2\.0-OpenSSH.*Red Hat`),
-			Confidence: 85,
+			Confidence: 0.85,
 			Method:     "banner",
 		},
 		{
 			Name:       "Debian Linux",
 			Family:     "Linux",
 			Pattern:    regexp.MustCompile(`(?i)SSH-2\.0-OpenSSH.*Debian`),
-			Confidence: 85,
+			Confidence: 0.85,
 			Method:     "banner",
 		},
 		{
 			Name:       "FreeBSD",
 			Family:     "BSD",
 			Pattern:    regexp.MustCompile(`(?i)SSH-2\.0-OpenSSH.*FreeBSD`),
-			Confidence: 85,
+			Confidence: 0.85,
 			Method:     "banner",
 		},
 
@@ -363,28 +457,28 @@ func (od *osDetector) initializeSignatures() {
 			Name:       "Microsoft IIS",
 			Family:     "Windows",
 			Pattern:    regexp.MustCompile(`(?i)Microsoft-IIS`),
-			Confidence: 90,
+			Confidence: 0.90,
 			Method:     "banner",
 		},
 		{
 			Name:       "Apache on Unix",
 			Family:     "Unix",
 			Pattern:    regexp.MustCompile(`(?i)Apache.*\(Unix\)`),
-			Confidence: 80,
+			Confidence: 0.80,
 			Method:     "banner",
 		},
 		{
 			Name:       "Apache on Linux",
 			Family:     "Linux",
 			Pattern:    regexp.MustCompile(`(?i)Apache.*\(Ubuntu|Debian|CentOS|Red Hat\)`),
-			Confidence: 80,
+			Confidence: 0.80,
 			Method:     "banner",
 		},
 		{
 			Name:       "nginx on Linux",
 			Family:     "Linux",
 			Pattern:    regexp.MustCompile(`(?i)nginx.*\(Ubuntu|Debian|CentOS\)`),
-			Confidence: 75,
+			Confidence: 0.75,
 			Method:     "banner",
 		},
 
@@ -393,21 +487,21 @@ func (od *osDetector) initializeSignatures() {
 			Name:       "Microsoft FTP Service",
 			Family:     "Windows",
 			Pattern:    regexp.MustCompile(`(?i)Microsoft FTP Service`),
-			Confidence: 85,
+			Confidence: 0.85,
 			Method:     "banner",
 		},
 		{
 			Name:       "vsftpd",
 			Family:     "Linux",
 			Pattern:    regexp.MustCompile(`(?i)vsFTPd`),
-			Confidence: 80,
+			Confidence: 0.80,
 			Method:     "banner",
 		},
 		{
 			Name:       "ProFTPD",
 			Family:     "Unix",
 			Pattern:    regexp.MustCompile(`(?i)ProFTPD`),
-			Confidence: 75,
+			Confidence: 0.75,
 			Method:     "banner",
 		},
 
@@ -416,21 +510,21 @@ func (od *osDetector) initializeSignatures() {
 			Name:       "Microsoft Exchange",
 			Family:     "Windows",
 			Pattern:    regexp.MustCompile(`(?i)Microsoft ESMTP MAIL Service`),
-			Confidence: 90,
+			Confidence: 0.90,
 			Method:     "banner",
 		},
 		{
 			Name:       "Postfix",
 			Family:     "Unix",
 			Pattern:    regexp.MustCompile(`(?i)Postfix`),
-			Confidence: 80,
+			Confidence: 0.80,
 			Method:     "banner",
 		},
 		{
 			Name:       "Sendmail",
 			Family:     "Unix",
 			Pattern:    regexp.MustCompile(`(?i)Sendmail`),
-			Confidence: 80,
+			Confidence: 0.80,
 			Method:     "banner",
 		},
 
@@ -439,14 +533,14 @@ func (od *osDetector) initializeSignatures() {
 			Name:       "Windows Server",
 			Family:     "Windows",
 			Pattern:    regexp.MustCompile(`windows-pattern`),
-			Confidence: 60,
+			Confidence: 0.60,
 			Method:     "port-pattern",
 		},
 		{
 			Name:       "Linux/Unix Server",
 			Family:     "Unix",
 			Pattern:    regexp.MustCompile(`unix-pattern`),
-			Confidence: 60,
+			Confidence: 0.60,
 			Method:     "port-pattern",
 		},
 
@@ -455,14 +549,14 @@ func (od *osDetector) initializeSignatures() {
 			Name:       "Windows TCP Stack",
 			Family:     "Windows",
 			Pattern:    regexp.MustCompile(`tcp-connect.*:445`),
-			Confidence: 50,
+			Confidence: 0.50,
 			Method:     "tcp-fingerprint",
 		},
 		{
 			Name:       "Unix TCP Stack",
 			Family:     "Unix",
 			Pattern:    regexp.MustCompile(`tcp-connect.*:22`),
-			Confidence: 50,
+			Confidence: 0.50,
 			Method:     "tcp-fingerprint",
 		},
 	}
